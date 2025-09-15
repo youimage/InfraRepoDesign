@@ -1,0 +1,57 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: staging
+
+resources:
+- ../../base
+- namespace.yaml
+
+
+commonLabels:
+  environment: staging
+  tier: application
+
+patchesStrategicMerge:
+- deployment-patch.yaml
+- ingress-patch.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+- name: app-config
+  literals:
+  - ENVIRONMENT=staging
+  - LOG_LEVEL=debug
+  - ENABLE_METRICS=true
+  - METRICS_PORT=9090
+  behavior: replace
+
+secretGenerator:
+- name: database-secret
+  literals:
+  - url=postgresql://staging_user:staging_password@staging-postgres:5432/staging_db
+  type: Opaque
+- name: app-secrets
+  literals:
+  - secret-key=staging-secret-key
+  - jwt-secret=staging-jwt-secret
+  - session-secret=staging-session-secret
+  type: Opaque
+
+replicas:
+- name: flask-app
+  count: 1
+- name: node-app
+  count: 1
+- name: nginx-proxy
+  count: 1
+
+images:
+- name: flask-app
+  newName: ghcr.io/shared-infrastructure/flask-app
+  newTag: staging
+- name: node-app
+  newName: ghcr.io/shared-infrastructure/node-app
+  newTag: staging

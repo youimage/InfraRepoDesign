@@ -1,0 +1,14 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shared-infrastructure-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+spec:
+  tls:
+  - hosts:
+    - staging.shared-infrastructure.example.com
+    secretName: staging-shared-infrastructure-tls
+  rules:
+  - host: staging.shared-infrastructure.example.com

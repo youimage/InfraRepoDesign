@@ -1,0 +1,290 @@
+name: Shared Infrastructure CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  DOCKER_REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  lint:
+    name: Lint and Code Quality
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install Python dependencies
+      run: |
+        pip install flake8 black isort
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Install Node.js dependencies
+      run: |
+        npm install -g eslint prettier
+        if [ -f package.json ]; then npm install; fi
+
+    - name: Python linting
+      run: |
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        black --check --diff .
+        isort --check-only --diff .
+
+    - name: JavaScript/TypeScript linting
+      run: |
+        if [ -f package.json ]; then
+          npx eslint . --ext .js,.ts,.jsx,.tsx || true
+          npx prettier --check . || true
+        fi
+
+    - name: Terraform lint
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: '1.5.0'
+
+    - name: Terraform format check
+      run: |
+        cd infra/cloud/terraform
+        terraform fmt -check -recursive
+
+    - name: Terraform validate
+      run: |
+        cd infra/cloud/terraform
+        terraform init -backend=false
+        terraform validate
+
+    - name: Kubernetes manifest validation
+      run: |
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        chmod +x kubectl
+        ./kubectl apply --dry-run=client -f infra/cloud/k8s/base/ || true
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install Python test dependencies
+      run: |
+        pip install pytest pytest-cov
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Install Node.js test dependencies
+      run: |
+        if [ -f package.json ]; then npm install; fi
+
+    - name: Run Python tests
+      env:
+        DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+      run: |
+        if [ -d tests ] && [ -f pytest.ini ] || [ -f pyproject.toml ]; then
+          pytest --cov=. --cov-report=xml || true
+        fi
+
+    - name: Run Node.js tests
+      run: |
+        if [ -f package.json ] && grep -q '"test"' package.json; then
+          npm test || true
+        fi
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+
+  build:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    
+    strategy:
+      matrix:
+        include:
+        - app: flask-app
+          dockerfile: flask.Dockerfile
+        - app: node-app
+          dockerfile: node.Dockerfile
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.DOCKER_REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.app }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./infra/local/docker
+        file: ./infra/local/docker/${{ matrix.dockerfile }}
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Setup Kustomize
+      run: |
+        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+        sudo mv kustomize /usr/local/bin/
+
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+
+    - name: Deploy to staging
+      run: |
+        cd infra/cloud/k8s/overlays/staging
+        kustomize edit set image flask-app=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}/flask-app:develop-${{ github.sha }}
+        kustomize edit set image node-app=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}/node-app:develop-${{ github.sha }}
+        kustomize build . | kubectl apply -f -
+
+    - name: Verify deployment
+      run: |
+        kubectl rollout status deployment/flask-app -n staging
+        kubectl rollout status deployment/node-app -n staging
+        kubectl get pods -n staging
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Setup Kustomize
+      run: |
+        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+        sudo mv kustomize /usr/local/bin/
+
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+
+    - name: Deploy to production
+      run: |
+        cd infra/cloud/k8s/overlays/production
+        kustomize edit set image flask-app=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}/flask-app:main-${{ github.sha }}
+        kustomize edit set image node-app=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}/node-app:main-${{ github.sha }}
+        kustomize build . | kubectl apply -f -
+
+    - name: Verify deployment
+      run: |
+        kubectl rollout status deployment/flask-app -n production
+        kubectl rollout status deployment/node-app -n production
+        kubectl get pods -n production
+
+    - name: Run smoke tests
+      run: |
+        # Add your smoke tests here
+        curl -f https://shared-infrastructure.example.com/health || exit 1
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'

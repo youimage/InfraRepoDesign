@@ -1,0 +1,55 @@
+Please create an example structure for a shared infrastructure repository including directory layout, configuration files, Dockerfiles, docker-compose.yml, Kubernetes manifests, Terraform modules, and CI/CD pipelines according to the following requirements:
+
+Requirements:
+
+Support running multiple applications on the same infrastructure.
+
+Development environment: Use Docker Compose to run Flask / Node / PostgreSQL / Nginx.
+
+Production environment: Include Terraform + Kubernetes manifests for cloud deployment (AWS / GCP / Azure).
+
+CI/CD: Provide a common pipeline using GitHub Actions that performs lint → test → build → deploy.
+
+Applications should be replaceable (adding a new app should only require changing Docker image name or service name).
+
+Include a README.md that documents usage, architecture diagrams, and instructions for connecting applications.
+
+Manage environment variables via .env and assume connection to secrets management.
+
+Switching between development and production environments should be easy and clear.
+
+Include not only file structure but also sample configuration files and templates.
+
+Suggested directory layout:
+
+infra/
+├── local/                     # Development Docker Compose environment
+│   ├── docker-compose.yml
+│   ├── docker/
+│   │   ├── flask.Dockerfile
+│   │   ├── node.Dockerfile
+│   │   └── nginx/
+│   │       └── default.conf
+│   └── postgres/
+│       └── init.sql
+│
+├── cloud/                     # Production cloud infrastructure
+│   ├── terraform/             # IaC (AWS/GCP/Azure)
+│   │   ├── vpc.tf
+│   │   ├── ecs.tf (or eks.tf)
+│   │   ├── rds.tf
+│   │   └── s3.tf
+│   └── k8s/                   # Kubernetes manifests
+│       ├── base/
+│       │   ├── deployment.yaml
+│       │   ├── service.yaml
+│       │   └── ingress.yaml
+│       └── overlays/
+│           ├── staging/
+│           └── production/
+│
+├── ci-cd/                     # Shared CI/CD pipeline
+│   └── github-actions/
+│       └── deploy.yml
+│
+└── README.md                  # Usage instructions, architecture diagrams, and app connection guides

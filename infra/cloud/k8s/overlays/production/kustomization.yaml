@@ -1,0 +1,57 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: production
+
+resources:
+- ../../base
+- namespace.yaml
+
+
+commonLabels:
+  environment: production
+  tier: application
+
+patchesStrategicMerge:
+- deployment-patch.yaml
+- ingress-patch.yaml
+
+configMapGenerator:
+- name: app-config
+  literals:
+  - ENVIRONMENT=production
+  - LOG_LEVEL=info
+  - ENABLE_METRICS=true
+  - METRICS_PORT=9090
+  behavior: replace
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+secretGenerator:
+- name: database-secret
+  literals:
+  - url=postgresql://prod_user:prod_password@production-postgres:5432/production_db
+  type: Opaque
+- name: app-secrets
+  literals:
+  - secret-key=production-secret-key
+  - jwt-secret=production-jwt-secret
+  - session-secret=production-session-secret
+  type: Opaque
+
+replicas:
+- name: flask-app
+  count: 3
+- name: node-app
+  count: 3
+- name: nginx-proxy
+  count: 2
+
+images:
+- name: flask-app
+  newName: ghcr.io/shared-infrastructure/flask-app
+  newTag: v1.0.0
+- name: node-app
+  newName: ghcr.io/shared-infrastructure/node-app
+  newTag: v1.0.0
