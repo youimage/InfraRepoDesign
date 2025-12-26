@@ -241,7 +241,7 @@ kubectl set image deployment/staging-flask-app flask-app=myapp:v1.2.3 -n staging
 kubectl rollout undo deployment/prod-flask-app -n production
 ```
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
