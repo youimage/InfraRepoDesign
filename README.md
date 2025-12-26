@@ -2,7 +2,7 @@
 
 A comprehensive DevOps infrastructure template for running multiple applications on shared infrastructure, supporting both development and production environments.
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 This repository provides a complete infrastructure setup that supports:
 
@@ -11,7 +11,7 @@ This repository provides a complete infrastructure setup that supports:
 - **CI/CD Pipeline**: GitHub Actions with automated lint, test, build, and deploy stages
 - **Multi-Application Support**: Easy to add new applications by changing Docker image names or service configurations
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 infra/
@@ -47,7 +47,7 @@ infra/
 └── README.md                # This documentation
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Local Development Setup
 
@@ -106,7 +106,7 @@ infra/
    kubectl get services -n production
    ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 
@@ -158,7 +158,7 @@ new-app:
     - app-network
 ```
 
-## 🏗️ Infrastructure Components
+## Infrastructure Components
 
 ### Local Development (Docker Compose)
 - **PostgreSQL 15**: Shared database with application-specific schemas
@@ -181,7 +181,7 @@ new-app:
 - **Deploy Stage**: Environment-specific deployments (staging/production)
 - **Security Stage**: Vulnerability scanning with Trivy
 
-## 🔐 Security Features
+## Security Features
 
 - **Network Isolation**: Private subnets for databases and internal services
 - **Encryption**: Data encryption at rest and in transit
@@ -190,7 +190,7 @@ new-app:
 - **Security Headers**: Comprehensive HTTP security headers in Nginx
 - **Vulnerability Scanning**: Automated security scanning in CI/CD
 
-## 📊 Monitoring and Observability
+## Monitoring and Observability
 
 ### Built-in Monitoring
 - **Health Checks**: Application and database health endpoints
@@ -203,7 +203,7 @@ new-app:
 - **ELK Stack**: Advanced log analysis
 - **Jaeger**: Distributed tracing
 
-## 🔄 Environment Management
+## Environment Management
 
 ### Development → Staging → Production
 
@@ -225,7 +225,7 @@ new-app:
    - Security hardening
    - Monitoring and alerting
 
-## 🚀 Deployment Workflows
+## Deployment Workflows
 
 ### Automatic Deployments
 - **Feature branches**: No deployment
@@ -276,7 +276,7 @@ kubectl rollout undo deployment/prod-flask-app -n production
 - **Load Balancer**: Configure appropriate health check intervals
 - **Auto-scaling**: Fine-tune CPU/memory thresholds
 
-## 🤝 Contributing
+## Contributing
 
 1. Follow the established directory structure
 2. Add environment-specific configurations in overlays
@@ -284,13 +284,13 @@ kubectl rollout undo deployment/prod-flask-app -n production
 4. Test changes in development environment first
 5. Ensure CI/CD pipeline passes all checks
 
-## 📚 Additional Resources
+## Additional Resources
 
 - [Docker Compose Documentation](https://docs.docker.com/compose/)
 - [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [Kubernetes Documentation](https://kubernetes.io/docs/)
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
 
-## 📝 License
+## License
 
 This infrastructure template is provided as-is for educational and development purposes. Adapt security settings and configurations for production use according to your organization's requirements.
